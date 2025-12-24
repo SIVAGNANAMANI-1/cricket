@@ -1,19 +1,27 @@
 import React, { useEffect, useState } from "react";
-import { useParams, useLocation } from "react-router-dom";
+import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { db } from "@/firebaseConfig";
 import { doc, onSnapshot } from "firebase/firestore";
+import { LiveViewer } from "@/components/LiveViewer";
+
+// Get the global App ID provided by the environment
+const appId = (window as any).__app_id || 'default-app-id';
 
 export default function LivePage() {
   // we route with param name `publicCode` in App.tsx
   const { publicCode } = useParams<{ publicCode: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
   const [match, setMatch] = useState<any>(location.state?.matchData || null);
   const [loading, setLoading] = useState<boolean>(!match);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
     if (!publicCode) return;
-    const ref = doc(db, "matches", publicCode);
+    // CORRECTED PATH: artifacts/{appId}/public/data/matches/{publicCode}
+    const docPath = `artifacts/${appId}/public/data/matches/${publicCode}`;
+    console.log("LivePage: Listening to match at:", docPath);
+    const ref = doc(db, docPath);
 
     const unsubscribe = onSnapshot(
       ref,
@@ -23,7 +31,9 @@ export default function LivePage() {
           setLoading(false);
           return;
         }
-        setMatch(snap.data());
+        const data = snap.data();
+        console.log("LivePage: Match data updated:", data);
+        setMatch(data);
         setLoading(false);
       },
       (err) => {
@@ -37,43 +47,75 @@ export default function LivePage() {
   }, [publicCode]);
 
   if (loading) {
-    return <div className="p-8 text-center text-gray-300 text-xl">Loading match details…</div>;
-  }
-
-  if (notFound || !match) {
     return (
-      <div className="p-8 text-center text-red-400 text-xl">
-        ❌ Match not found
-        <p className="text-gray-400 mt-2">Check if the Match ID is correct.</p>
+      <div className="min-h-screen bg-gradient-sky flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cricket-field mx-auto mb-4"></div>
+          <p className="text-gray-300 text-xl">Loading match details…</p>
+        </div>
       </div>
     );
   }
 
+  if (notFound || !match) {
+    return (
+      <div className="min-h-screen bg-gradient-sky flex items-center justify-center p-4">
+        <div className="text-center bg-card p-8 rounded-xl shadow-cricket max-w-md">
+          <div className="text-6xl mb-4">❌</div>
+          <h1 className="text-2xl font-bold text-red-400 mb-2">Match Not Found</h1>
+          <p className="text-gray-400 mb-4">
+            The match code "{publicCode}" doesn't exist or has been deleted.
+          </p>
+          <button
+            onClick={() => navigate("/")}
+            className="px-4 py-2 bg-gradient-field text-white rounded-lg hover:opacity-90 transition-opacity"
+          >
+            Back to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Extract match data for LiveViewer
+  const score = match.score || { runs: 0, wickets: 0, overs: 0, balls: 0 };
+  const striker = match.striker || null;
+  const nonStriker = match.nonStriker || null;
+  const currentBowler = match.currentBowler || null;
+  const battingTeam = match.battingTeam || match.teamA || "Team A";
+  const bowlingTeam = match.bowlingTeam || match.teamB || "Team B";
+  const bowlerOvers = match.bowlerOvers || {};
+  const allPlayers = match.allPlayers || [];
+  const totalDotBalls = match.totalDotBalls || 0;
+  const totalFours = match.totalFours || 0;
+  const totalSixes = match.totalSixes || 0;
+  const ballHistory = match.ballHistory || [];
+  const currentOverRuns = match.currentOverRuns || 0;
+  const currentOverBalls = match.currentOverBalls || 0;
+  const currentInnings = match.currentInnings || 1;
+  const innings1Score = match.innings1Score || null;
+
   return (
-    <div className="max-w-3xl mx-auto p-6 bg-gray-900/40 border border-gray-700 rounded-xl shadow-lg backdrop-blur-md">
-      <h1 className="text-2xl font-bold text-orange-400 text-center mb-4">Live Match – {publicCode}</h1>
-
-      <div className="grid grid-cols-2 gap-4 text-center mb-6">
-        <div className="p-4 bg-gray-800 rounded-lg border border-gray-700">
-          <h2 className="text-xl font-semibold">{match.teamA}</h2>
-        </div>
-        <div className="p-4 bg-gray-800 rounded-lg border border-gray-700">
-          <h2 className="text-xl font-semibold">{match.teamB}</h2>
-        </div>
-      </div>
-
-      <div className="text-center text-lg mb-4">
-        <span className="text-blue-300">Total Overs:</span> {match.overs}
-      </div>
-
-      <div className="text-center text-lg mb-2">
-        <span className="text-blue-300">Status:</span>{" "}
-        <span className="text-yellow-400 font-semibold">{match.status}</span>
-      </div>
-
-      <div className="mt-6 p-4 bg-gray-800/60 rounded-lg border border-gray-700 text-center text-gray-300">
-        Scoring UI will go here…
-      </div>
-    </div>
+    <LiveViewer
+      matchData={match}
+      onBack={() => navigate("/")}
+      score={score}
+      striker={striker}
+      nonStriker={nonStriker}
+      currentBowler={currentBowler}
+      battingTeam={battingTeam}
+      bowlingTeam={bowlingTeam}
+      bowlerOvers={bowlerOvers}
+      allPlayers={allPlayers}
+      totalDotBalls={totalDotBalls}
+      totalFours={totalFours}
+      totalSixes={totalSixes}
+      ballHistory={ballHistory}
+      currentOverRuns={currentOverRuns}
+      currentOverBalls={currentOverBalls}
+      currentInnings={currentInnings}
+      innings1Score={innings1Score}
+      matchResult={match.matchResult}
+    />
   );
 }

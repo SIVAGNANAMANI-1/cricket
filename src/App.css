@@ -64,9 +64,11 @@
   justify-content: center;
   font-size: 3rem;
   font-weight: bold;
-  color: white;
+  color: #FFD700; /* Gold text */
   border-radius: 50%;
-  background-color: #4CAF50; /* Green */
+  background: linear-gradient(145deg, #FFD700, #FFA500); /* Gold gradient */
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.3), 0 0 20px rgba(255,215,0,0.5); /* Inner shadow and glow */
+  border: 2px solid #DAA520; /* Golden border */
 }
 
 .coin {
@@ -84,6 +86,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.8), -2px -2px 4px rgba(255,255,255,0.3); /* Etched effect */
 }
 
 .coin .heads {
@@ -95,7 +98,7 @@
 }
 
 .coin-container.flipping .coin {
-  animation: coinFlip 0.2s infinite linear;
+  animation: coinFlip 0.1s infinite linear; /* Faster flipping */
 }
 
 @keyframes coinFlip {
@@ -104,7 +107,7 @@
 }
 
 .coin-container.flipping .side {
-  animation: fadeInOut 0.2s infinite alternate;
+  animation: fadeInOut 0.1s infinite alternate; /* Faster fade */
 }
 
 @keyframes fadeInOut {

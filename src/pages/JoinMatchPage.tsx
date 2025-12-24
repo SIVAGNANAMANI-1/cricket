@@ -6,10 +6,14 @@ const JoinMatchPage: React.FC = () => {
   const navigate = useNavigate();
 
   const handleJoinMatch = (matchData: any) => {
-    const publicCode = matchData.id; // Assuming id is the publicCode
-    navigate(`/live/${publicCode}`, {
-      state: { matchData },
-    });
+    const publicCode = matchData.publicCode || matchData.id || matchData.matchCode;
+    if (publicCode) {
+      navigate(`/live/${publicCode}`, {
+        state: { matchData },
+      });
+    } else {
+      console.error("Could not determine match code from data:", matchData);
+    }
   };
 
   return <JoinMatch onJoinMatch={handleJoinMatch} />;
