@@ -66,7 +66,7 @@ export default function UmpireAuthPage() {
         className="mb-4"
       />
       {error && <div className="text-red-400 mb-4">{error}</div>}
-      <Button onClick={handleSubmit} disabled={isLoading} className="w-full">
+      <Button onClick={handleSubmit} disabled={isLoading} className="w-full text-white bg-blue-600 hover:bg-blue-700">
         {isLoading ? "Authenticating..." : "Authenticate"}
       </Button>
     </div>

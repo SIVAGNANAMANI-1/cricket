@@ -1,8 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, TrendingUp, Users, Clock, Target } from "lucide-react";
+import { ArrowLeft, TrendingUp, Users, Clock, Target, BarChart3 } from "lucide-react";
 import { Scorecard } from "./Scorecard";
 import { MatchSummary } from "./MatchSummary";
 
@@ -149,8 +149,181 @@ interface LiveViewerProps {
   matchResult?: string | null;
 }
 
+const MatchAnalytics = ({ matchData, ballHistory, score, currentInnings, innings1Score }: any) => {
+  const calculateRemainingBalls = (totalOvers: number, currentOvers: number) => {
+    const totalBalls = totalOvers * 6;
+    const currentBalls = Math.floor(currentOvers) * 6 + Math.round((currentOvers % 1) * 10);
+    return Math.max(0, totalBalls - currentBalls);
+  };
+
+  const prob = useMemo(() => {
+    const battingTeam = matchData.battingTeam;
+    const bowlingTeam = matchData.bowlingTeam;
+
+    if (currentInnings === 1) {
+      const crr = score.runs / (score.overs || 1);
+      const wicketsLost = score.wickets;
+      let probBatting = 50 + (crr - 6) * 5 - wicketsLost * 4;
+      probBatting = Math.max(10, Math.min(90, probBatting));
+      return { battingTeam, bowlingTeam, batting: Math.round(probBatting), bowling: 100 - Math.round(probBatting) };
+    } else {
+      const target = (innings1Score || 0) + 1;
+      const runsNeeded = target - score.runs;
+      const remainingBalls = calculateRemainingBalls(matchData.overs, score.overs);
+      const wicketsLeft = (matchData.teamSize || 11) - 1 - score.wickets;
+      
+      if (runsNeeded <= 0) return { battingTeam, bowlingTeam, batting: 100, bowling: 0 };
+      if (remainingBalls <= 0 && runsNeeded > 0) return { battingTeam, bowlingTeam, batting: 0, bowling: 100 };
+      if (wicketsLeft <= 0) return { battingTeam, bowlingTeam, batting: 0, bowling: 100 };
+
+      const rrr = runsNeeded / (remainingBalls / 6);
+      let probChasing = 50 + (8 - rrr) * 8 + (wicketsLeft - 5) * 6;
+      probChasing = Math.max(5, Math.min(95, probChasing));
+      return { battingTeam, bowlingTeam, batting: Math.round(probChasing), bowling: 100 - Math.round(probChasing) };
+    }
+  }, [matchData, score, currentInnings, innings1Score]);
+
+  const manhattanData = useMemo(() => {
+    const maxOvers = matchData.overs;
+    const oversArray = Array.from({ length: maxOvers }, (_, i) => i + 1);
+
+    const getOversRuns = (t: string) => {
+      const runsPerOver = Array(maxOvers).fill(0);
+      ballHistory.forEach((ball: any) => {
+        const ballBattingTeam = ball.battingTeam;
+        if (ballBattingTeam === t) {
+          const overIdx = Math.floor(ball.over);
+          if (overIdx < maxOvers) {
+            runsPerOver[overIdx] += (ball.runs || 0);
+          }
+        }
+      });
+      return runsPerOver;
+    };
+
+    const teamARuns = getOversRuns(matchData.teamA);
+    const teamBRuns = getOversRuns(matchData.teamB);
+
+    return { oversArray, teamARuns, teamBRuns };
+  }, [matchData, ballHistory]);
+
+  const partnerships = useMemo(() => {
+    const history = ballHistory || [];
+    let pList: { wicket: number; runs: number; balls: number }[] = [];
+    let currentPartnerRuns = 0;
+    let currentPartnerBalls = 0;
+    let wicketNum = 1;
+
+    history.forEach((ball: any) => {
+      const ballBattingTeam = ball.battingTeam;
+      if (ballBattingTeam === matchData.battingTeam) {
+        if (ball.type === 'runs') {
+          currentPartnerRuns += ball.runs;
+          currentPartnerBalls++;
+        } else if (ball.type === 'extra' && (ball.extraType === 'b' || ball.extraType === 'lb')) {
+          currentPartnerBalls++;
+        } else if (ball.type === 'extra') {
+          currentPartnerRuns += ball.runs;
+        } else if (ball.type === 'wicket') {
+          currentPartnerRuns += ball.runs;
+          currentPartnerBalls++;
+          pList.push({ wicket: wicketNum, runs: currentPartnerRuns, balls: currentPartnerBalls });
+          currentPartnerRuns = 0;
+          currentPartnerBalls = 0;
+          wicketNum++;
+        }
+      }
+    });
+
+    pList.push({ wicket: wicketNum, runs: currentPartnerRuns, balls: currentPartnerBalls });
+    return pList.slice(0, 10);
+  }, [matchData, ballHistory]);
+
+  return (
+    <div className="space-y-4">
+      <Card className="shadow-lg bg-card text-card-foreground border-border">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-bold text-foreground">Live Win Probability</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 pb-4">
+          <div className="flex justify-between text-xs font-black">
+            <span className="text-green-500 uppercase">{prob.battingTeam}: {prob.batting}%</span>
+            <span className="text-blue-500 uppercase">{prob.bowlingTeam}: {prob.bowling}%</span>
+          </div>
+          <div className="w-full h-3.5 bg-blue-600 rounded-full overflow-hidden flex">
+            <div className="bg-green-500 h-full transition-all duration-500" style={{ width: `${prob.batting}%` }} />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-lg bg-card text-card-foreground border-border">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-bold text-foreground">Manhattan Chart (Runs Per Over)</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-2 pb-4">
+          <div className="w-full overflow-x-auto">
+            <div className="min-w-[280px] h-32 flex items-end gap-2 border-b border-l border-border pb-1 pl-1">
+              {manhattanData.oversArray.map((overNum) => {
+                const aRuns = manhattanData.teamARuns[overNum - 1] || 0;
+                const bRuns = manhattanData.teamBRuns[overNum - 1] || 0;
+                const maxVal = Math.max(...manhattanData.teamARuns, ...manhattanData.teamBRuns, 6);
+                const heightA = (aRuns / maxVal) * 90;
+                const heightB = (bRuns / maxVal) * 90;
+
+                return (
+                  <div key={overNum} className="flex-1 flex flex-col items-center gap-0.5 justify-end h-full group relative">
+                    <div className="absolute bottom-full mb-1 bg-slate-900 border border-slate-800 text-white rounded text-[10px] px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 whitespace-nowrap">
+                      Over {overNum}: {matchData.teamA} {aRuns}r | {matchData.teamB} {bRuns}r
+                    </div>
+                    <div className="w-full flex gap-0.5 items-end justify-center">
+                      <div className="w-2.5 bg-green-500 rounded-t-sm transition-all duration-300" style={{ height: `${heightA}px` }} />
+                      <div className="w-2.5 bg-blue-500 rounded-t-sm transition-all duration-300" style={{ height: `${heightB}px` }} />
+                    </div>
+                    <span className="text-[10px] text-muted-foreground mt-1">Ov {overNum}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex justify-center gap-4 text-xs mt-3">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 bg-green-500 rounded-sm" />
+              <span className="text-muted-foreground">{matchData.teamA}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 bg-blue-500 rounded-sm" />
+              <span className="text-muted-foreground">{matchData.teamB}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-lg bg-card text-card-foreground border-border">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-bold text-foreground">Innings Partnerships</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 pb-4">
+          <div className="space-y-2.5">
+            {partnerships.map((p, idx) => (
+              <div key={idx} className="space-y-1">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Wicket {p.wicket} Partnership</span>
+                  <span className="font-bold text-foreground">{p.runs} runs ({p.balls} balls)</span>
+                </div>
+                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div className="bg-orange-500 h-full rounded-full" style={{ width: `${Math.min(100, (p.runs / (score.runs || 1)) * 100)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
 export const LiveViewer = ({ matchData, onBack, score, striker, nonStriker, currentBowler, battingTeam, bowlingTeam, bowlerOvers, allPlayers, totalDotBalls, totalFours, totalSixes, ballHistory, currentOverRuns, currentOverBalls, currentInnings, innings1Score, matchResult }: LiveViewerProps) => {
-  const [activeTab, setActiveTab] = useState<'scorecard' | 'stats' | 'commentary'>('scorecard');
+  const [activeTab, setActiveTab] = useState<'scorecard' | 'stats' | 'charts' | 'commentary'>('scorecard');
   const [showSummary, setShowSummary] = useState(false);
 
   // Function to find player stats from allPlayers array
@@ -187,6 +360,8 @@ export const LiveViewer = ({ matchData, onBack, score, striker, nonStriker, curr
       />
     );
   }
+
+
 
   const currentStrikerStats = striker ? getPlayerStats(striker.name) : null;
   const currentNonStrikerStats = nonStriker ? getPlayerStats(nonStriker.name) : null;
@@ -410,6 +585,7 @@ export const LiveViewer = ({ matchData, onBack, score, striker, nonStriker, curr
           {[
             { id: 'scorecard', label: 'Scorecard', icon: Target },
             { id: 'stats', label: 'Stats', icon: TrendingUp },
+            { id: 'charts', label: 'Analytics', icon: BarChart3 },
             { id: 'commentary', label: 'Commentary', icon: Clock }
           ].map(({ id, label, icon: Icon }) => (
             <Button
@@ -459,6 +635,16 @@ export const LiveViewer = ({ matchData, onBack, score, striker, nonStriker, curr
             totalSixes={totalSixes}
             totalDotBalls={totalDotBalls}
             score={score}
+          />
+        )}
+
+        {activeTab === 'charts' && (
+          <MatchAnalytics
+            matchData={matchData}
+            ballHistory={ballHistory}
+            score={score}
+            currentInnings={currentInnings}
+            innings1Score={innings1Score}
           />
         )}
 

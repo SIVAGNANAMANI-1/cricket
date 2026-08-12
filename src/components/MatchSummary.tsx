@@ -100,14 +100,17 @@ export const MatchSummary = ({
 
     let currentInnings = 1;
     let firstBattingTeam = '';
+    let i1LegalBalls = 0;
+    let i2LegalBalls = 0;
 
     history.forEach((ball: any) => {
-      const strikerName = ball.striker?.name;
-      const bowlerName = ball.bowler?.name;
+      const strikerName = typeof ball.striker === 'object' ? ball.striker?.name : ball.striker;
+      const bowlerName = typeof ball.bowler === 'object' ? ball.bowler?.name : ball.bowler;
 
       if (!strikerName) return;
 
       const battingTeam = getPlayerTeam(strikerName);
+      if (!battingTeam) return;
 
       if (!firstBattingTeam) {
         firstBattingTeam = battingTeam;
@@ -123,66 +126,56 @@ export const MatchSummary = ({
       const stats = currentInnings === 1 ? i1Stats : i2Stats;
 
       // Update Score
-      if (ball.type === 'runs') {
-        stats.runs += ball.runs;
-      } else if (ball.type === 'extra') {
-        stats.runs += ball.runs;
-      } else if (ball.type === 'wicket') {
+      stats.runs += ball.runs || 0;
+      if (ball.isWicket) {
         stats.wickets += 1;
-        if (ball.wicketType === 'run_out') {
-          stats.runs += ball.runs; // Add runs if any on run out
-        }
       }
 
-      // Update Overs (approximate from ball count)
-      // We'll calculate exact overs at the end based on legal balls if needed, 
-      // but using the ball's over number is easier if reliable.
-      // Let's track max over seen.
-      stats.overs = Math.max(stats.overs, ball.over);
+      // Track legal balls count
+      const isLegalBall = ball.deliveryType !== 'wide' && ball.deliveryType !== 'no_ball';
+      if (isLegalBall) {
+        if (currentInnings === 1) i1LegalBalls++;
+        else i2LegalBalls++;
+      }
 
       // Update Batter Stats
-      if (!stats.batters[strikerName]) stats.batters[strikerName] = { runs: 0, balls: 0, name: strikerName };
-
-      if (ball.type === 'runs') {
-        stats.batters[strikerName].runs += ball.runs;
-        stats.batters[strikerName].balls += 1;
-      } else if (ball.type === 'wicket') {
-        // If run out, the runs go to team but not necessarily batsman, 
-        // but usually ball counts. 
-        // For simplicity in summary:
-        if (ball.wicketType !== 'wd' && ball.wicketType !== 'nb') {
-          stats.batters[strikerName].balls += 1;
-        }
-      } else if (ball.type === 'extra') {
-        // Wides/No-balls don't count to batter balls faced usually
-        if (ball.extraType !== 'wd' && ball.extraType !== 'nb') {
-          stats.batters[strikerName].balls += 1;
-        }
+      if (!stats.batters[strikerName]) {
+        stats.batters[strikerName] = { runs: 0, balls: 0, name: strikerName };
       }
+      stats.batters[strikerName].runs += ball.batRuns || 0;
+      stats.batters[strikerName].balls += 1; // Wide is included per custom rules
 
       // Update Bowler Stats
       if (bowlerName) {
-        if (!stats.bowlers[bowlerName]) stats.bowlers[bowlerName] = { wickets: 0, runs: 0, balls: 0, name: bowlerName };
-
-        if (ball.type === 'runs') {
-          stats.bowlers[bowlerName].runs += ball.runs;
+        if (!stats.bowlers[bowlerName]) {
+          stats.bowlers[bowlerName] = { wickets: 0, runs: 0, balls: 0, name: bowlerName };
+        }
+        if (ball.deliveryType !== 'bye' && ball.deliveryType !== 'leg_bye') {
+          stats.bowlers[bowlerName].runs += ball.runs || 0;
+        }
+        if (ball.isWicket && ball.dismissalType !== 'run_out' && ball.dismissalType !== 'retired_hurt' && ball.dismissalType !== 'retired_out') {
+          stats.bowlers[bowlerName].wickets += 1;
+        }
+        if (isLegalBall) {
           stats.bowlers[bowlerName].balls += 1;
-        } else if (ball.type === 'wicket') {
-          if (ball.wicketType !== 'run_out') {
-            stats.bowlers[bowlerName].wickets += 1;
-          }
-          stats.bowlers[bowlerName].balls += 1;
-        } else if (ball.type === 'extra') {
-          stats.bowlers[bowlerName].runs += ball.runs;
-          if (ball.extraType !== 'wd' && ball.extraType !== 'nb') {
-            stats.bowlers[bowlerName].balls += 1;
-          }
         }
       }
     });
 
+    const calculateOversNum = (balls: number) => {
+      return Math.floor(balls / 6) + (balls % 6) / 10;
+    };
+
+    i1Stats.overs = calculateOversNum(i1LegalBalls);
+    i2Stats.overs = calculateOversNum(i2LegalBalls);
+
+    // If second innings hasn't started yet, make sure the team name is set correctly
+    if (!i2Stats.team && i1Stats.team) {
+      i2Stats.team = i1Stats.team === teamA ? teamB : teamA;
+    }
+
     return { innings1: i1Stats, innings2: i2Stats };
-  }, [matchData]);
+  }, [matchData, ballHistory]);
 
   const getTopPerformers = (stats: any) => {
     const batters = Object.values(stats.batters)

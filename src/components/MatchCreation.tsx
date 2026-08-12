@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Share, Users, Clock, Zap, Copy, Check } from "lucide-react";
+import { Share, Users, Clock, Zap, Copy, Check, ShieldCheck } from "lucide-react";
 import { doc, setDoc } from "firebase/firestore";
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "firebase/auth";
 import { db } from "@/firebaseConfig";
@@ -73,6 +73,7 @@ export const MatchCreation: React.FC<MatchCreationProps> = ({ onMatchCreated }) 
   const [isUmpireAuthStarted, setIsUmpireAuthStarted] = useState(false);
   const [inputUmpireCode, setInputUmpireCode] = useState("");
   const [umpireAuthError, setUmpireAuthError] = useState<string | null>(null);
+  const [enteredUmpireKey, setEnteredUmpireKey] = useState("");
   const [isLoadingAuth, setIsLoadingAuth] = useState(false);
 
   const copyToClipboard = (text: string, field: string) => {
@@ -217,11 +218,23 @@ export const MatchCreation: React.FC<MatchCreationProps> = ({ onMatchCreated }) 
 
   const addPlayerToTeamA = (name: string) => {
     if (!name) return;
-    setMatchData((prev: any) => ({ ...prev, teamAPlayers: [...prev.teamAPlayers, { name }] }));
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setMatchData((prev: any) => {
+      const duplicate = prev.teamAPlayers.some((p: Player) => p.name.toLowerCase() === trimmed.toLowerCase());
+      if (duplicate) { alert(`"${trimmed}" is already in ${prev.teamA || "Team A"}.`); return prev; }
+      return { ...prev, teamAPlayers: [...prev.teamAPlayers, { name: trimmed }] };
+    });
   };
   const addPlayerToTeamB = (name: string) => {
     if (!name) return;
-    setMatchData((prev: any) => ({ ...prev, teamBPlayers: [...prev.teamBPlayers, { name }] }));
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setMatchData((prev: any) => {
+      const duplicate = prev.teamBPlayers.some((p: Player) => p.name.toLowerCase() === trimmed.toLowerCase());
+      if (duplicate) { alert(`"${trimmed}" is already in ${prev.teamB || "Team B"}.`); return prev; }
+      return { ...prev, teamBPlayers: [...prev.teamBPlayers, { name: trimmed }] };
+    });
   };
 
   const toggleCaptainA = (playerName: string) => {
@@ -327,21 +340,15 @@ export const MatchCreation: React.FC<MatchCreationProps> = ({ onMatchCreated }) 
                 <Input
                   type="number"
                   placeholder="Custom overs"
-                  value={matchData.overs}
-                  onChange={(e) => setMatchData((p: any) => ({ ...p, overs: parseInt(e.target.value) || 20 }))}
+                  min={1}
+                  value={matchData.overs ?? ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setMatchData((p: any) => ({ ...p, overs: val === "" ? "" : parseInt(val) || "" }));
+                  }}
                   className="border-input focus:border-primary bg-background text-foreground mt-2"
                 />
               </div>
-
-              {matchData.teamSize >= 4 && matchData.overs > 0 && (
-                <div className="bg-muted p-3 rounded border border-border text-sm">
-                  <p className="font-semibold text-primary">Match Feasibility:</p>
-                  <ul className="list-disc list-inside mt-1 space-y-1 text-muted-foreground">
-                    <li>Bowlers per team: <span className="text-foreground font-bold">{matchData.teamSize - 1}</span> (1 WK)</li>
-                    <li>Max overs per bowler: <span className="text-foreground font-bold">{Math.ceil(matchData.overs / (matchData.teamSize - 1))}</span></li>
-                  </ul>
-                </div>
-              )}
 
               <div className="flex gap-3 flex-col sm:flex-row mt-4">
                 <Button
@@ -355,7 +362,7 @@ export const MatchCreation: React.FC<MatchCreationProps> = ({ onMatchCreated }) 
                 </Button>
                 <Button
                   onClick={() => setStep(3)}
-                  disabled={!matchData.teamSize || matchData.teamSize < 4 || matchData.teamSize > 11 || !matchData.overs || matchData.overs < 1}
+                  disabled={!matchData.teamSize || matchData.teamSize < 4 || matchData.teamSize > 11 || !matchData.overs || Number(matchData.overs) < 1}
                   className="flex-1 bg-primary text-primary-foreground hover:opacity-90"
                 >
                   Continue

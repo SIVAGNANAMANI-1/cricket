@@ -12,7 +12,7 @@ export default function NotFound() {
         </p>
         <Button
           onClick={() => window.location.href = "/"}
-          className="bg-gradient-field hover:opacity-90 transition-all duration-300"
+          className="bg-gradient-field hover:opacity-90 transition-all duration-300 text-white"
         >
           <Home className="w-4 h-4 mr-2" />
           Go Home
